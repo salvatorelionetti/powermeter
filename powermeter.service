@@ -1,0 +1,10 @@
+[Unit]
+Description=Power Meter and Raspberry Temperature internet logger
+
+[Service]
+ExecStart=/usr/bin/python /home/pi/projects/powermeter/powermeter.py
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target
