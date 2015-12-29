@@ -1,6 +1,7 @@
 #Pushing data to Thingspeak
 import httplib, urllib
 import os, sys
+import config
 
 # Return CPU temperature as a character string                                     
 def getCPUtemperature():
@@ -67,6 +68,7 @@ powerFailCnt = getPowerFailCnt()
 totKm1_fileName = '/tmp/totKm1'
 totKm1 = None
 
+# Ensure that /tmp is a RAM like FS
 # Read previous consumed energy
 try:
     with open(totKm1_fileName, 'r') as totKm1_file:
@@ -116,7 +118,7 @@ if powerFailCnt is None or powerFailCnt != powerFailCntKm1:
 
 print dict
 
-dict['key'] = 'I7JZQRT6TT4NVWAE'
+dict['key'] = config.config['thingspeak_api_key']
 
 sortedKeys = sorted(dict)
 params = urllib.urlencode([(x, dict[x]) for x in sortedKeys])
