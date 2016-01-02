@@ -1,8 +1,11 @@
 [Unit]
 Description=Power Meter and Raspberry Temperature internet logger
+Wants=network-online.target
+After=network-online.target
 
 [Service]
-ExecStart=/usr/bin/python /home/pi/projects/powermeter/powermeter.py
+ExecStart=/bin/sh -c '/usr/bin/stdbuf -i0 -o0 -e0 /usr/bin/python /home/pi/projects/powermeter/powermeter.py 2>&1 | tee -a /tmp/powermeter.py.log'
+#ExecStart=/usr/bin/python /home/pi/projects/powermeter/powermeter.py
 Restart=always
 RestartSec=60
 

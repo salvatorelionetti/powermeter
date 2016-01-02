@@ -1,7 +1,11 @@
 #Pushing data to Thingspeak
-import httplib, urllib
-import os, sys
+import os, sys, time
+import httplib, urllib, socket
+import logging
+import traceback
 import config
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Return CPU temperature as a character string                                     
 def getCPUtemperature():
@@ -11,11 +15,21 @@ def getCPUtemperature():
 def getPowerConsumed():
     ret = -10
     cmd = os.popen('/home/pi/projects/powermeter/a.out 0x5B14 2')
+    ret0 = None
+    ret1 = None
     for line in cmd.readlines():
         #reg[1]=13175
+        line1 = line.replace('reg[0]=','')
+        if line1 != line:
+            ret0 = int(line1.split()[0])
         line1 = line.replace('reg[1]=','')
         if line1 != line:
-            ret = int(line1.split()[0])
+            ret1 = int(line1.split()[0])
+
+    if ret1 is not None:
+        ret = ret1
+    if ret0 is not None:
+        ret = ret0*256*256 + ret
     return ret
 
 def getPowerAccumulated():
@@ -67,12 +81,17 @@ powerFailCnt = getPowerFailCnt()
 
 totKm1_fileName = '/tmp/totKm1'
 totKm1 = None
+dt = None
+tNow = time.time()
 
 # Ensure that /tmp is a RAM like FS
 # Read previous consumed energy
 try:
     with open(totKm1_fileName, 'r') as totKm1_file:
         totKm1 = int(totKm1_file.read())
+        modTime = os.path.getmtime(totKm1_fileName)
+        dt = tNow - modTime
+        print 'dt', dt, 'mtime', time.ctime(modTime)
 except IOError as e:
     print("Reading ({})".format(e))
 
@@ -103,29 +122,48 @@ except IOError as e:
     print("Writing powerFailCnt ({})".format(e))
 
 dict = {}
-dict['field1'] = W
+dict['field1'] = W / 100
 dict['field2'] = T
 if totKm1 is None or tot != totKm1:
-    dict['field3'] = tot
+    dict['field3'] = tot * 10
 if totKm1 is None:
     dict['field4'] = -200
+    dict['field8'] = -200
 elif tot != totKm1:
-    dict['field4'] = tot - totKm1
+    dict['field4'] = (tot - totKm1) * 10
+    dict['field8'] = (tot - totKm1) * 10 * 3600 / dt
 dict['field5'] = f
 dict['field6'] = powerFactor
 if powerFailCnt is None or powerFailCnt != powerFailCntKm1:
     dict['field7'] = powerFailCnt
 
-print dict
+logging.debug(dict)
 
 dict['key'] = config.config['thingspeak_api_key']
 
 sortedKeys = sorted(dict)
 params = urllib.urlencode([(x, dict[x]) for x in sortedKeys])
 headers = {"Content-type": "application/x-www-form-urlencoded","Accept": "text/plain"}
-conn = httplib.HTTPConnection("api.thingspeak.com:80", timeout=30)
-conn.request("POST", "/update", params, headers)
-response = conn.getresponse()
-print response.status, response.reason
-data = response.read()
-conn.close()
+attempts = 0
+
+while attempts < 5:
+    conn = None
+    try:
+        conn = httplib.HTTPConnection("api.thingspeak.com:80", timeout=30)
+        conn.request("POST", "/update", params, headers)
+        response = conn.getresponse()
+        logging.debug(str(response.status) + ' ' + response.reason)
+        data = response.read()
+        break
+    except socket.gaierror, e:
+        attempts += 1
+        traceback.print_exc()
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except:
+                traceback.print_exc()
+
+    time.sleep(5)
+    logging.debug('attempt %d'%attempts)
