@@ -12,8 +12,9 @@ SW:
 HW:
 * ABB B21 power meter 
 * RS485 <-> USB converter
+* A host machine with USB, e.g. PC, Raspberry PI.
 
-To install, after download the code: (systemd required)
+To install, after downloaded the code: (systemd required)
 ```
 make
 ```
