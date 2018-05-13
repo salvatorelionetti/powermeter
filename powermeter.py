@@ -3,9 +3,30 @@ import os, sys, time
 import httplib, urllib, socket
 import logging
 import traceback
+import smtplib, email, email.MIMEText
 import config
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# TODO common
+def sendMail(m = ''):
+
+    dst = config.config['mail_watchers'];
+    if type(dst) == type([]):
+        dst = ','.join(dst)
+
+    msg = email.MIMEText.MIMEText(m+"\n"+'https://thingspeak.com/channels/63975')
+    msg['Subject'] = 'Assenza di corrente in via Lamarmora!'
+
+    server = smtplib.SMTP('smtp.gmail.com', 587)
+    server.ehlo()
+    server.starttls()
+    server.ehlo()
+    server.login(config.config['mail_username'], config.config['mail_password'])
+    server.sendmail(config.config['mail_username'], config.config['mail_watchers'], msg.as_string())
+
+def startReadCmd(args):
+    return os.popen('/home/pi/projects/powermeter/powermeter.out '+args)
 
 # Return CPU temperature as a character string                                     
 def getCPUtemperature():
@@ -14,7 +35,7 @@ def getCPUtemperature():
 
 def getPowerConsumed():
     ret = -10
-    cmd = os.popen('/home/pi/projects/powermeter/a.out 0x5B14 2')
+    cmd = startReadCmd('0x5B14 2')
     ret0 = None
     ret1 = None
     for line in cmd.readlines():
@@ -30,11 +51,12 @@ def getPowerConsumed():
         ret = ret1
     if ret0 is not None:
         ret = ret0*256*256 + ret
+
     return ret
 
 def getPowerAccumulated():
     ret = -100
-    cmd = os.popen('/home/pi/projects/powermeter/a.out 0x5000 4')
+    cmd = startReadCmd('0x5000 4')
     for line in cmd.readlines():
         #reg[1]=13175
         line1 = line.replace('reg[3]=','')
@@ -44,7 +66,7 @@ def getPowerAccumulated():
 
 def getFrequency():
     ret = -50
-    cmd = os.popen('/home/pi/projects/powermeter/a.out 0x5b2c 1')
+    cmd = startReadCmd('0x5b2c 1')
     for line in cmd.readlines():
         #reg[1]=13175
         line1 = line.replace('reg[0]=','')
@@ -54,7 +76,7 @@ def getFrequency():
 
 def getPowerFactor():
     ret = -50
-    cmd = os.popen('/home/pi/projects/powermeter/a.out 0x5b3a 1')
+    cmd = startReadCmd('0x5b3a 1')
     for line in cmd.readlines():
         #reg[1]=13175
         line1 = line.replace('reg[0]=','')
@@ -64,12 +86,13 @@ def getPowerFactor():
 
 def getPowerFailCnt():
     ret = -50
-    cmd = os.popen('/home/pi/projects/powermeter/a.out 0x8a2f 1')
+    cmd = startReadCmd('0x8a2f 1')
     for line in cmd.readlines():
         #reg[1]=13175
         line1 = line.replace('reg[0]=','')
         if line1 != line:
             ret = int(line1.split()[0])
+
     return ret
 
 T = getCPUtemperature()
@@ -79,13 +102,13 @@ f = getFrequency()
 powerFactor = getPowerFactor()
 powerFailCnt = getPowerFailCnt()
 
+# Ensure that /tmp is a RAM like FS
+# Read previous consumed energy
 totKm1_fileName = '/tmp/totKm1'
 totKm1 = None
 dt = None
 tNow = time.time()
 
-# Ensure that /tmp is a RAM like FS
-# Read previous consumed energy
 try:
     with open(totKm1_fileName, 'r') as totKm1_file:
         totKm1 = int(totKm1_file.read())
@@ -118,6 +141,7 @@ try:
     if powerFailCntKm1 is None or powerFailCnt != powerFailCntKm1:
         with open(powerFailCntKm1_fileName, 'w') as powFailCntKm1_file:
             powFailCntKm1_file.write(str(powerFailCnt))
+
 except IOError as e:
     print("Writing powerFailCnt ({})".format(e))
 
@@ -134,8 +158,16 @@ elif tot != totKm1:
     dict['field8'] = (tot - totKm1) * 10 * 3600 / dt
 dict['field5'] = f
 dict['field6'] = powerFactor
-if powerFailCnt is None or powerFailCnt != powerFailCntKm1:
+if powerFailCntKm1 is None or powerFailCnt != powerFailCntKm1:
     dict['field7'] = powerFailCnt
+
+if powerFailCntKm1 is None or powerFailCnt != powerFailCntKm1:
+    if powerFailCnt == -50:
+        print 'sendMail(Corrente ASSENTE!)'
+        sendMail('Corrente ASSENTE!'+str(dict))
+    else:
+        print 'sendMail(Corrente presente)'
+        sendMail('Corrente presente.'+str(dict))
 
 logging.debug(dict)
 

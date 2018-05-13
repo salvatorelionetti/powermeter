@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <modbus.h>
+#include <modbus/modbus.h>
 
 int main(int argc, char *argv[]) {
 
@@ -16,14 +16,15 @@ int main(int argc, char *argv[]) {
 
     int reg_start = 0x8900; /* Serial number */
     int reg_howMany = 2; /* 16bits per register */
+    const char *devname = "/dev/pm.serial";
 
     if (argc==3) {
         reg_start = strtol(argv[1], NULL, 0);
         reg_howMany = strtol(argv[2], NULL, 0);
     }
 
-    printf("Opening /dev/ttyUSB0 [0x%x] for %d registers\n", reg_start, reg_howMany);
-    ctx = modbus_new_rtu("/dev/ttyUSB0", 19200, 'E', 8, 1);
+    printf("Opening %s [0x%x] for %d registers\n", devname, reg_start, reg_howMany);
+    ctx = modbus_new_rtu(devname, 19200, 'E', 8, 1);
     if (ctx == NULL) {
         fprintf(stderr, "Unable to create the libmodbus context\n");
         return -1;
